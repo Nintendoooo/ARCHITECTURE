@@ -9,8 +9,8 @@ workspace {
             architect "имя архитектора"
         }
 
-        my_user    = person "Пользователь"
-        my_admin   = person "Администратор системы"
+        my_user = person "Пользователь"
+        my_admin = person "Администратор системы"
         my_support = person "Специалист ТП"
         my_driver = person "Водитель"
         
@@ -23,16 +23,22 @@ workspace {
             description "Система платежей"
         }
 
-        emap = softwareSystem "Карта города"{
+        emap = softwareSystem "Карты"{
             description "Система навигации"
+        }
+        epolice = softwareSystem "ГИБДД" {
+            description "Система контроля документов водителей"
         }
 
         my_user -> my_system description "Заказывает такси"
-        my_driver -> my_system description "Водитель ищет заказ"
+        my_driver -> my_system description "Поиск заказа"
         my_admin -> my_system description "Администрирование водителей"
+        my_support -> my_system description "Решение инцедентов, помощь в работе с системой"
 
-        my_system ->
-        
+
+        my_system -> ebank description "Прием оплаты от клиентов, вывод средств на карты водителям"
+        my_system -> emap description "Построение маршрутов, рассчет расстояния и времени в пути"
+        my_system -> epolice description "Проверка акутальности документов водителей"
         }
 
     views {
