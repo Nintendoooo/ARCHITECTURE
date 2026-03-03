@@ -9,10 +9,10 @@ workspace {
             architect "имя архитектора"
         }
 
-        my_user = person "Пользователь"
-        my_admin = person "Администратор системы"
-        my_support = person "Специалист ТП"
-        my_driver = person "Водитель"
+        my_user = person "Пользователь" description "Клиент, заказывающий такси"
+        my_admin = person "Администратор системы" description "Управляет системой"
+        my_support = person "Специалист ТП" description "Помогает пользователям"
+        my_driver = person "Водитель" description "Исполнитель заказов"
         
 
         my_system = softwareSystem "UBER"{
@@ -20,14 +20,15 @@ workspace {
         }
         
         ebank = softwareSystem "Е БАНК"{
-            description "Система платежей"
+            description "Платежная система"
         }
 
-        emap = softwareSystem "Карты"{
+        map = softwareSystem "Карты"{
             description "Система навигации"
         }
-        epolice = softwareSystem "ГИБДД" {
-            description "Система контроля документов водителей"
+
+        checkdoc = softwareSystem "Верификация" {
+            description "Система проверки паспортов и ВУ водителей"
         }
 
         my_user -> my_system description "Заказывает такси"
@@ -36,9 +37,14 @@ workspace {
         my_support -> my_system description "Решение инцедентов, помощь в работе с системой"
 
 
-        my_system -> ebank description "Прием оплаты от клиентов, вывод средств на карты водителям"
-        my_system -> emap description "Построение маршрутов, рассчет расстояния и времени в пути"
-        my_system -> epolice description "Проверка акутальности документов водителей"
+        my_system -> ebank description "Оплата от клиентов"
+        my_system -> map description "Запрос маршрута, запрос рассчетного времени прибытия"
+        my_system -> checkdoc description "Отправка документов водителей для проверки"
+        
+        ebank -> my_system description "Вывод средств на карты водителям"
+        map -> my_system description "Маршрут, координаты водителя и пользователя"
+        checkdoc -> my_system description "Результаты проверки документов водителя"
+        
         }
 
     views {
