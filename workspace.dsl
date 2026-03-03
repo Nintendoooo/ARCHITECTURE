@@ -15,7 +15,7 @@ workspace {
         my_driver = person "Водитель" description "Исполнитель заказов"
         
 
-        my_system = softwareSystem "UBER"{
+        my_system = softwareSystem "UBER"{ 
             description "Система заказа такси"
         }
         
@@ -31,19 +31,19 @@ workspace {
             description "Система проверки паспортов и ВУ водителей"
         }
 
-        my_user -> my_system description "Заказывает такси"
-        my_driver -> my_system description "Поиск заказа"
+        my_user -> my_system description "Создание заказа, получение истории"
+        my_driver -> my_system description "Прием заказов, завершение поездки"
         my_admin -> my_system description "Администрирование водителей"
-        my_support -> my_system description "Решение инцедентов, помощь в работе с системой"
+        my_support -> my_system description "Решение инцидентов, помощь в работе с системой"
 
 
-        my_system -> ebank description "Оплата от клиентов"
+        my_system -> ebank description "Запрос на списание средств с клиента, Запрос на выплату водителю"
         my_system -> map description "Запрос маршрута, запрос рассчетного времени прибытия"
         my_system -> checkdoc description "Отправка документов водителей для проверки"
         
-        ebank -> my_system description "Вывод средств на карты водителям"
-        map -> my_system description "Маршрут, координаты водителя и пользователя"
-        checkdoc -> my_system description "Результаты проверки документов водителя"
+        ebank -> my_system description "Подтверждение списание средств с клиента. Подтверждение выплаты водителю"
+        map -> my_system description "Маршрут, расстояние и время"
+        checkdoc -> my_system description "Результат проверки документов водителя"
         
         }
 
