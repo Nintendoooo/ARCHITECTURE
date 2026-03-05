@@ -51,6 +51,7 @@ https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp
 - Пользователь
 - Водитель
 - Поездка
+
 Реализовать API:
 - Создание нового пользователя
 - Поиск пользователя по логину
