@@ -116,6 +116,7 @@ workspace {
         api -> order "Запросы на управление заказами" "HTTP/REST"
         api -> match "Запросы на получение активных заказов для водителя" "HTTP/REST"
         api -> pay "Запросы на оплату" "HTTP/REST"
+        mess -> api "Уведомления для клиентов" "HTTP/REST"
 
         #api -> input "Запросы админа на поиск пользователя"
         #input -> api "Ответы на запросы админа"
@@ -178,6 +179,27 @@ workspace {
             autoLayout
         }
 
-   
+        dynamic my_system {
+            title "Создание заказа поездки"
+            my_user -> app "Инициирование заказа" 
+            app -> api "Запрос на создание заказа" "HTTPS/REST"
+            api -> order "Маршрутизация запроса на создание заказа" "HTTP/REST"
+
+            order -> map "Запрос маршрута и времени" "HTTPS/REST"
+            map -> order "Дистанция, расчетное время прибытия" "HTTPS/REST"
+
+            order -> db "Создаем заказ в БД со статусом Активный" "PostgreSQL"
+            db -> order "Активный заказ создан" "PostgreSQL"
+
+            order -> mess "Запрос на уведомление о создании заказа" "HTTP/REST"
+            mess -> api "Передача уведомления о создании заказа" "HTTP/REST"
+            api -> app "Уведомление 'Заказ создан. Ищем водителя'" "HTTPS/REST"
+
+            order -> api "Ответ клиенту о создании заказа" "HTTP/REST"
+            api -> app "Ответ на инициирование заказа" "HTTPS/REST"
+            app -> my_user "Отображение статуса 'Заказ создан. Ищем водителя'"
+
+            autoLayout lr
+        }
     }
 }
