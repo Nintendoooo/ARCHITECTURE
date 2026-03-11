@@ -62,3 +62,18 @@ https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp
 - Принятие заказа водителем
 - Получение истории поездок пользователя
 - Завершение поездки  
+
+## Реализация API:
+
+| Функция | Метод | Путь | Сервис |
+|----------|-------|----------|--------|
+| Создание нового пользователя | POST | /api/users | input |
+| Поиск пользователя по логину | GET | /api/users?login={login}` | input |
+| Поиск пользователя по маске имени и фамилии | GET | /api/users?name={mask} | input |
+| Регистрация водителя | POST | /api/drivers | input |
+| Создание заказа поездки | POST | /api/orders | order |
+| Получение активных заказов | GET | /api/orders?status=active | match |
+| Принятие заказа водителем | POST | /api/orders/{id}/accept | match |
+| Получение истории поездок пользователя | GET | /api/v1/users/{id}/orders | order |
+| Завершение поездки | POST | /api/orders/{id}/complete | order |
+
