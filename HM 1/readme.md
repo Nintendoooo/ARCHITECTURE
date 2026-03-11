@@ -74,6 +74,6 @@ https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp
 | Создание заказа поездки | POST | /api/orders | order |
 | Получение активных заказов | GET | /api/orders?status=active | match |
 | Принятие заказа водителем | POST | /api/orders/{id}/accept | match |
-| Получение истории поездок пользователя | GET | /api/v1/users/{id}/orders | order |
+| Получение истории поездок пользователя | GET | /api/users/{id}/orders | order |
 | Завершение поездки | POST | /api/orders/{id}/complete | order |
 
