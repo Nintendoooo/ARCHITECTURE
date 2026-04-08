@@ -1,0 +1,124 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: taxi-postgres
+    environment:
+      POSTGRES_DB: taxi_db
+      POSTGRES_USER: taxi_user
+      POSTGRES_PASSWORD: taxi_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taxi_user -d taxi_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - taxi-network
+    restart: unless-stopped
+
+  input-service:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taxi-input-service
+    command: ["/app/taxi-service-input", "--config", "/app/configs/static_config_input.yaml"]
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./configs/static_config_input.yaml:/app/configs/static_config_input.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - taxi-network
+    restart: unless-stopped
+
+  order-service:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taxi-order-service
+    command: ["/app/taxi-service-order", "--config", "/app/configs/static_config_order.yaml"]
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./configs/static_config_order.yaml:/app/configs/static_config_order.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - taxi-network
+    restart: unless-stopped
+
+  match-service:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taxi-match-service
+    command: ["/app/taxi-service-match", "--config", "/app/configs/static_config_match.yaml"]
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./configs/static_config_match.yaml:/app/configs/static_config_match.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - taxi-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: taxi-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./swagger:/usr/share/nginx/html/swagger:ro
+      - ./openapi.yaml:/usr/share/nginx/html/openapi.yaml:ro
+    depends_on:
+      - input-service
+      - order-service
+      - match-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - taxi-network
+    restart: unless-stopped
+
+networks:
+  taxi-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
