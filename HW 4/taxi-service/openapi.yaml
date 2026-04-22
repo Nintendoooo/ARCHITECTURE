@@ -1,0 +1,903 @@
+openapi: 3.0.3
+info:
+  title: Taxi Service API
+  description: |
+    REST API для системы заказа такси (Вариант 16).
+    
+    Реализована микросервисная архитектура из трёх сервисов:
+    - **Input Service** (порт 8081) — регистрация пользователей/водителей, аутентификация, поиск
+    - **Order Service** (порт 8082) — создание заказов, история поездок, завершение
+    - **Match Service** (порт 8083) — просмотр активных заказов, принятие заказа водителем
+    
+    Все запросы проходят через Nginx API Gateway на порту 8080.
+    
+    ### Аутентификация
+    
+    Большинство endpoints требуют JWT Bearer токен. Получить токен можно через `POST /api/auth/login`.
+    Токен передаётся в заголовке: `Authorization: Bearer <token>`
+    
+    ### Роли пользователей
+    
+    - **passenger** — обычный пользователь, может создавать заказы и просматривать свою историю
+    - **driver** — водитель (зарегистрированный через `/api/drivers`), может принимать и завершать заказы
+  version: 1.0.0
+  contact:
+    name: Taxi Service Team
+
+servers:
+  - url: http://localhost:8080
+    description: API Gateway (Nginx) — единая точка входа
+
+tags:
+  - name: Authentication
+    description: Аутентификация пользователей и водителей
+  - name: Users
+    description: Управление пользователями
+  - name: Drivers
+    description: Регистрация и управление водителями
+  - name: Orders
+    description: Создание и управление заказами поездок
+  - name: Match
+    description: Сопоставление заказов с водителями
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен, полученный при логине. Содержит user_id и role (passenger/driver).
+
+  schemas:
+    User:
+      type: object
+      description: Пользователь системы (клиент такси)
+      properties:
+        id:
+          type: string
+          example: "69e3c6254b2945112303d7c1"
+          description: Уникальный идентификатор пользователя (MongoDB ObjectId)
+        login:
+          type: string
+          example: "ivan_petrov"
+          description: Уникальный логин
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+          description: Email адрес (уникальный)
+        first_name:
+          type: string
+          example: "Иван"
+          description: Имя
+        last_name:
+          type: string
+          example: "Петров"
+          description: Фамилия
+        phone:
+          type: string
+          example: "+79001234567"
+          description: Номер телефона
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15 10:30:00"
+          description: Дата и время регистрации
+      required:
+        - login
+        - email
+        - first_name
+        - last_name
+        - phone
+
+    CreateUserRequest:
+      type: object
+      description: Данные для регистрации нового пользователя
+      properties:
+        login:
+          type: string
+          example: "ivan_petrov"
+          description: Уникальный логин (только латиница, цифры, _)
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+          description: Email адрес
+        first_name:
+          type: string
+          example: "Иван"
+          description: Имя
+        last_name:
+          type: string
+          example: "Петров"
+          description: Фамилия
+        phone:
+          type: string
+          example: "+79001234567"
+          description: Номер телефона (должен начинаться с +)
+        password:
+          type: string
+          format: password
+          example: "securePass123"
+          description: Пароль (минимум 6 символов)
+      required:
+        - login
+        - email
+        - first_name
+        - last_name
+        - phone
+        - password
+
+    LoginRequest:
+      type: object
+      description: Данные для входа в систему
+      properties:
+        login:
+          type: string
+          example: "ivan_petrov"
+          description: Логин пользователя
+        password:
+          type: string
+          format: password
+          example: "securePass123"
+          description: Пароль
+      required:
+        - login
+        - password
+
+    AuthToken:
+      type: object
+      description: JWT токен аутентификации
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoicGFzc2VuZ2VyIn0.abc123"
+          description: JWT Bearer токен для авторизации запросов
+        user_id:
+          type: string
+          example: "69e3c6254b2945112303d7c1"
+          description: ID пользователя (MongoDB ObjectId)
+        expires_at:
+          type: string
+          format: date-time
+          example: "2024-01-16 10:30:00"
+          description: Время истечения токена (24 часа от выдачи)
+
+    Driver:
+      type: object
+      description: Профиль водителя (связан с пользователем)
+      properties:
+        id:
+          type: string
+          example: "69e3c6254b2945112303d7c2"
+          description: Уникальный идентификатор водителя (MongoDB ObjectId)
+        user_id:
+          type: string
+          example: "69e3c6254b2945112303d7c1"
+          description: ID пользователя-владельца профиля (MongoDB ObjectId)
+        license_number:
+          type: string
+          example: "77 АА 123456"
+          description: Номер водительского удостоверения
+        car_model:
+          type: string
+          example: "Toyota Camry"
+          description: Марка и модель автомобиля
+        car_plate:
+          type: string
+          example: "А123БВ77"
+          description: Государственный номер автомобиля
+        is_available:
+          type: boolean
+          example: true
+          description: Доступен ли водитель для новых заказов
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15 10:30:00"
+          description: Дата и время регистрации водителя
+      required:
+        - user_id
+        - license_number
+        - car_model
+        - car_plate
+
+    CreateDriverRequest:
+      type: object
+      description: Данные для регистрации водителя (user_id берётся из JWT токена)
+      properties:
+        license_number:
+          type: string
+          example: "77 АА 123456"
+          description: Номер водительского удостоверения
+        car_model:
+          type: string
+          example: "Toyota Camry"
+          description: Марка и модель автомобиля
+        car_plate:
+          type: string
+          example: "А123БВ77"
+          description: Государственный номер автомобиля
+      required:
+        - license_number
+        - car_model
+        - car_plate
+
+    Order:
+      type: object
+      description: Заказ поездки
+      properties:
+        id:
+          type: string
+          example: "69e3c6254b2945112303d7c3"
+          description: Уникальный идентификатор заказа (MongoDB ObjectId)
+        user_id:
+          type: string
+          example: "69e3c6254b2945112303d7c1"
+          description: ID пассажира, создавшего заказ (MongoDB ObjectId)
+        driver_id:
+          type: string
+          nullable: true
+          example: null
+          description: ID водителя (null пока заказ не принят, MongoDB ObjectId)
+        pickup_address:
+          type: string
+          example: "ул. Ленина, 10"
+          description: Адрес подачи
+        destination_address:
+          type: string
+          example: "ул. Пушкина, 25"
+          description: Адрес назначения
+        status:
+          type: string
+          enum: [active, accepted, completed, cancelled]
+          example: "active"
+          description: |
+            Статус заказа:
+            - `active` — ожидает водителя
+            - `accepted` — водитель принял заказ
+            - `completed` — поездка завершена
+            - `cancelled` — заказ отменён
+        price:
+          type: number
+          format: double
+          nullable: true
+          example: null
+          description: Стоимость поездки (null до завершения)
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15 10:30:00"
+          description: Дата и время создания заказа
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+          description: Дата и время завершения поездки (null если не завершена)
+      required:
+        - user_id
+        - pickup_address
+        - destination_address
+        - status
+
+    CreateOrderRequest:
+      type: object
+      description: Данные для создания нового заказа поездки
+      properties:
+        pickup_address:
+          type: string
+          example: "ул. Ленина, 10"
+          description: Адрес подачи (откуда)
+        destination_address:
+          type: string
+          example: "ул. Пушкина, 25"
+          description: Адрес назначения (куда)
+      required:
+        - pickup_address
+        - destination_address
+
+    Error:
+      type: object
+      description: Описание ошибки
+      properties:
+        error:
+          type: string
+          example: "Invalid request: missing required field 'login'"
+          description: Текстовое описание ошибки
+
+paths:
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Вход в систему
+      description: |
+        Аутентификация пользователя или водителя по логину и паролю.
+        
+        Возвращает JWT токен, который необходимо передавать в заголовке
+        `Authorization: Bearer <token>` для защищённых endpoints.
+        
+        Токен содержит `user_id` и `role` (`passenger` или `driver`).
+        Роль `driver` назначается автоматически, если пользователь зарегистрирован как водитель.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              login: "ivan_petrov"
+              password: "securePass123"
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthToken'
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                user_id: "69e3c6254b2945112303d7c1"
+                expires_at: "2024-01-16 10:30:00"
+        '401':
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid login or password"
+
+  /api/users:
+    post:
+      tags:
+        - Users
+      summary: Создание нового пользователя
+      description: |
+        Регистрация нового пользователя в системе.
+        
+        Логин и email должны быть уникальными. Пароль хешируется перед сохранением.
+        Телефон должен начинаться с символа `+`.
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              login: "ivan_petrov"
+              email: "ivan@example.com"
+              first_name: "Иван"
+              last_name: "Петров"
+              phone: "+79001234567"
+              password: "securePass123"
+      responses:
+        '201':
+          description: Пользователь успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: "69e3c6254b2945112303d7c1"
+                login: "ivan_petrov"
+                email: "ivan@example.com"
+                first_name: "Иван"
+                last_name: "Петров"
+                phone: "+79001234567"
+                created_at: "2024-01-15 10:30:00"
+        '400':
+          description: Невалидные данные (пустые поля, неверный формат email/телефона)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid request: email must contain '@'"
+        '409':
+          description: Пользователь с таким логином или email уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User with this login already exists"
+
+    get:
+      tags:
+        - Users
+      summary: Поиск пользователей
+      description: |
+        Поиск пользователей по логину или маске имени/фамилии.
+        
+        **Обязательно** передать один из параметров:
+        - `login` — точный поиск по логину, возвращает один объект User
+        - `name` — поиск по маске (LIKE %mask%) по полям first_name и last_name, возвращает массив
+        
+        Если не передан ни один параметр — возвращается 400.
+      operationId: findUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: login
+          in: query
+          required: false
+          schema:
+            type: string
+          example: "ivan_petrov"
+          description: Точный логин пользователя для поиска
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          example: "Иван"
+          description: Маска для поиска по имени и фамилии (регистронезависимо)
+      responses:
+        '200':
+          description: |
+            Результат поиска.
+            - При `?login=` — объект User
+            - При `?name=` — массив User объектов (может быть пустым)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/User'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+              examples:
+                byLogin:
+                  summary: Результат поиска по логину
+                  value:
+                    id: "69e3c6254b2945112303d7c1"
+                    login: "ivan_petrov"
+                    email: "ivan@example.com"
+                    first_name: "Иван"
+                    last_name: "Петров"
+                    phone: "+79001234567"
+                    created_at: "2024-01-15 10:30:00"
+                byName:
+                  summary: Результат поиска по маске имени
+                  value:
+                    - id: "69e3c6254b2945112303d7c1"
+                      login: "ivan_petrov"
+                      email: "ivan@example.com"
+                      first_name: "Иван"
+                      last_name: "Петров"
+                      phone: "+79001234567"
+                      created_at: "2024-01-15 10:30:00"
+                    - id: "69e3c6254b2945112303d7c3"
+                      login: "ivan_sidorov"
+                      email: "sidorov@example.com"
+                      first_name: "Иван"
+                      last_name: "Сидоров"
+                      phone: "+79009876543"
+                      created_at: "2024-01-16 09:00:00"
+        '400':
+          description: Не передан ни один из параметров поиска (login или name)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Query parameter 'login' or 'name' is required"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Unauthorized: token not found"
+        '404':
+          description: Пользователь не найден (только при поиске по логину)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User not found"
+
+  /api/users/{userId}/orders:
+    get:
+      tags:
+        - Orders
+      summary: История поездок пользователя
+      description: |
+        Получение всех заказов (поездок) конкретного пользователя.
+        
+        **Права доступа:**
+        - Пассажир может видеть только свою историю (`user_id` из токена должен совпадать с `{userId}`)
+        - Водитель может просматривать историю любого пользователя
+        
+        Возвращает все заказы независимо от статуса (active, accepted, completed, cancelled).
+      operationId: getUserOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "69e3c6254b2945112303d7c1"
+          description: ID пользователя, чью историю запрашиваем (MongoDB ObjectId)
+      responses:
+        '200':
+          description: Список заказов пользователя (может быть пустым)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+              example:
+                - id: "69e3c6254b2945112303d7c4"
+                  user_id: "69e3c6254b2945112303d7c1"
+                  driver_id: "69e3c6254b2945112303d7c2"
+                  pickup_address: "ул. Ленина, 10"
+                  destination_address: "ул. Пушкина, 25"
+                  status: "completed"
+                  price: 350.0
+                  created_at: "2024-01-15 10:30:00"
+                  completed_at: "2024-01-15 11:00:00"
+                - id: "69e3c6254b2945112303d7c5"
+                  user_id: "69e3c6254b2945112303d7c1"
+                  driver_id: null
+                  pickup_address: "пр. Мира, 5"
+                  destination_address: "ул. Садовая, 12"
+                  status: "active"
+                  price: null
+                  created_at: "2024-01-16 14:00:00"
+                  completed_at: null
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Нет прав для просмотра истории этого пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Access denied: you can only view your own order history"
+
+
+  /api/drivers:
+    post:
+      tags:
+        - Drivers
+      summary: Регистрация водителя
+      description: |
+        Регистрация текущего пользователя как водителя.
+        
+        `user_id` берётся автоматически из JWT токена — пользователь регистрирует себя.
+        Один пользователь может иметь только один профиль водителя.
+        
+        После регистрации при следующем логине токен будет содержать `role: "driver"`.
+      operationId: registerDriver
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDriverRequest'
+            example:
+              license_number: "77 АА 123456"
+              car_model: "Toyota Camry"
+              car_plate: "А123БВ77"
+      responses:
+        '201':
+          description: Водитель успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Driver'
+              example:
+                id: "69e3c6254b2945112303d7c2"
+                user_id: "69e3c6254b2945112303d7c1"
+                license_number: "77 АА 123456"
+                car_model: "Toyota Camry"
+                car_plate: "А123БВ77"
+                is_available: true
+                created_at: "2024-01-15 10:30:00"
+        '400':
+          description: Невалидные данные (пустые поля)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid request: 'car_model' is required"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Пользователь уже зарегистрирован как водитель
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User is already registered as a driver"
+
+
+  /api/orders:
+    post:
+      tags:
+        - Orders
+      summary: Создание заказа поездки
+      description: |
+        Создание нового заказа такси.
+        
+        `user_id` пассажира берётся из JWT токена.
+        Заказ создаётся со статусом `active` и ожидает принятия водителем.
+        
+        Адреса подачи и назначения не должны совпадать.
+      operationId: createOrder
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              pickup_address: "ул. Ленина, 10"
+              destination_address: "ул. Пушкина, 25"
+      responses:
+        '201':
+          description: Заказ успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "69e3c6254b2945112303d7c4"
+                user_id: "69e3c6254b2945112303d7c1"
+                driver_id: null
+                pickup_address: "ул. Ленина, 10"
+                destination_address: "ул. Пушкина, 25"
+                status: "active"
+                price: null
+                created_at: "2024-01-15 10:30:00"
+                completed_at: null
+        '400':
+          description: Невалидные данные (пустые адреса или адреса совпадают)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid request: pickup and destination addresses must differ"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Match
+      summary: Получение активных заказов
+      description: |
+        Получение списка заказов со статусом `active`.
+        
+        Предназначен для водителей — позволяет увидеть доступные заказы для принятия.
+        
+        **Обязательный параметр:** `?status=active` (другие значения не поддерживаются).
+      operationId: listActiveOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [active]
+          example: "active"
+          description: Фильтр по статусу заказа (поддерживается только `active`)
+      responses:
+        '200':
+          description: Список активных заказов (может быть пустым)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+              example:
+                - id: "69e3c6254b2945112303d7c4"
+                  user_id: "69e3c6254b2945112303d7c1"
+                  driver_id: null
+                  pickup_address: "ул. Ленина, 10"
+                  destination_address: "ул. Пушкина, 25"
+                  status: "active"
+                  price: null
+                  created_at: "2024-01-15 10:30:00"
+                  completed_at: null
+                - id: "69e3c6254b2945112303d7c6"
+                  user_id: "69e3c6254b2945112303d7c3"
+                  driver_id: null
+                  pickup_address: "пр. Победы, 1"
+                  destination_address: "ул. Гагарина, 7"
+                  status: "active"
+                  price: null
+                  created_at: "2024-01-15 10:45:00"
+                  completed_at: null
+        '400':
+          description: Параметр status отсутствует или имеет недопустимое значение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Query parameter 'status=active' is required"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/orders/{orderId}/accept:
+    post:
+      tags:
+        - Match
+      summary: Принятие заказа водителем
+      description: |
+        Водитель принимает активный заказ.
+        
+        **Требования:**
+        - Вызывающий должен иметь роль `driver` (зарегистрирован через `/api/drivers`)
+        - Заказ должен быть в статусе `active`
+        
+        После принятия статус заказа меняется на `accepted`, а `driver_id` заполняется.
+        Водитель не может принять уже принятый или завершённый заказ.
+      operationId: acceptOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "69e3c6254b2945112303d7c3"
+          description: ID заказа для принятия (MongoDB ObjectId)
+      responses:
+        '200':
+          description: Заказ успешно принят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "69e3c6254b2945112303d7c4"
+                user_id: "69e3c6254b2945112303d7c1"
+                driver_id: "69e3c6254b2945112303d7c2"
+                pickup_address: "ул. Ленина, 10"
+                destination_address: "ул. Пушкина, 25"
+                status: "accepted"
+                price: null
+                created_at: "2024-01-15 10:30:00"
+                completed_at: null
+        '400':
+          description: Заказ не в статусе active (уже принят, завершён или отменён)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Order is not in 'active' status"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Пользователь не является водителем
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Access denied: only drivers can accept orders"
+        '404':
+          description: Заказ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Order not found"
+
+  /api/orders/{orderId}/complete:
+    post:
+      tags:
+        - Orders
+      summary: Завершение поездки
+      description: |
+        Водитель завершает принятую поездку.
+        
+        **Требования:**
+        - Вызывающий должен иметь роль `driver`
+        - Заказ должен быть в статусе `accepted`
+        - Вызывающий должен быть именно тем водителем, который принял этот заказ
+        
+        После завершения статус меняется на `completed`, заполняется `completed_at`.
+      operationId: completeOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "69e3c6254b2945112303d7c3"
+          description: ID заказа для завершения (MongoDB ObjectId)
+      responses:
+        '200':
+          description: Поездка успешно завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "69e3c6254b2945112303d7c4"
+                user_id: "69e3c6254b2945112303d7c1"
+                driver_id: "69e3c6254b2945112303d7c2"
+                pickup_address: "ул. Ленина, 10"
+                destination_address: "ул. Пушкина, 25"
+                status: "completed"
+                price: null
+                created_at: "2024-01-15 10:30:00"
+                completed_at: "2024-01-15 11:00:00"
+        '400':
+          description: Заказ не в статусе accepted (ещё не принят или уже завершён)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Order is not in 'accepted' status"
+        '401':
+          description: Отсутствует или невалидный JWT токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Нет прав — не водитель или не тот водитель, что принял заказ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Access denied: you are not the assigned driver for this order"
+        '404':
+          description: Заказ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Order not found"
