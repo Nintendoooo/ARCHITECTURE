@@ -1,0 +1,57 @@
+components_manager:
+    coro_pool:
+        initial_size: 500
+        max_size: 1000
+
+    task_processors:
+        main-task-processor:
+            worker_threads: 4
+            thread_name: main-worker
+        fs-task-processor:
+            worker_threads: 2
+            thread_name: fs-worker
+
+    default_task_processor: main-task-processor
+
+    components:
+        server:
+            listener:
+                port: 8081
+                task_processor: main-task-processor
+
+        logging:
+            fs-task-processor: fs-task-processor
+            loggers:
+                default:
+                    file_path: '@stderr'
+                    level: debug
+                    overflow_behavior: discard
+
+        testsuite-support: {}
+
+        dns-client:
+            fs-task-processor: fs-task-processor
+
+        # MongoDB configuration (replaces PostgreSQL)
+        mongo-db:
+            # Connection URI for MongoDB
+            # Format: mongodb://username:password@host:port/database
+            # For Docker Compose: mongodb://taxi_app:taxi_app_password@mongodb:27017/taxi_db
+            # Using direct connection without authentication for local development
+            # For production, use: mongodb://taxi_app:taxi_app_password@mongodb:27017
+            uri: 'mongodb://taxi_user:taxi_pass@mongodb:27017'
+            database: 'taxi_db'
+            pool_size: 15
+            min_pool_size: 8
+            max_pool_size: 100
+            wait_queue_timeout_ms: 10000
+
+        taxi-jwt-auth:
+            secret: taxi-secret-key-change-in-production
+
+        handler-ping:
+            path: /ping
+            method: GET
+            task_processor: main-task-processor
+            throttling_enabled: false
+            url_trailing_slash: strict-match

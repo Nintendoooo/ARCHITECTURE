@@ -1,0 +1,45 @@
+groups:
+  - name: cache_alerts
+    interval: 30s
+    rules:
+      - alert: LowCacheHitRate
+        expr: cache_hit_rate < 70
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low cache hit rate detected"
+          description: "Cache hit rate is below 70% for {{ $labels.cache }}"
+
+      - alert: HighCacheEvictions
+        expr: rate(cache_evictions_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High cache eviction rate detected"
+          description: "Cache eviction rate is above 10/sec for {{ $labels.cache }}"
+
+  - name: rate_limit_alerts
+    interval: 30s
+    rules:
+      - alert: HighRateLimitBlocking
+        expr: rate_limit_denied_requests_total / rate_limit_requests_total > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit blocking detected"
+          description: "Rate limit is blocking more than 10% of requests"
+
+  - name: service_alerts
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "Service {{ $labels.job }} is not responding"
