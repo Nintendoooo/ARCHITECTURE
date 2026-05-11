@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'taxi-input-service'
+    static_configs:
+      - targets: ['input-service:8081']
+    metrics_path: '/metrics'
+
+  - job_name: 'taxi-order-service'
+    static_configs:
+      - targets: ['order-service:8082']
+    metrics_path: '/metrics'
+
+  - job_name: 'taxi-match-service'
+    static_configs:
+      - targets: ['match-service:8083']
+    metrics_path: '/metrics'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
